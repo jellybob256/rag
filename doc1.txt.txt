@@ -1,0 +1,1 @@
+Python is a programming language that emphasizes readability and simplicity. It is widely used in web development, data science, and AI.

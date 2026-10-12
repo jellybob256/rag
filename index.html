@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>RAG Demo</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #loader { display: none; margin-bottom: 10px; }
+        #results { margin-top: 20px; }
+        .cached { color: green; font-weight: bold; }
+        .feedback-section { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 10px; }
+        .metric { font-size: 0.9em; color: #555; }
+        input, textarea { width: 100%; margin-bottom: 10px; }
+        button { padding: 5px 10px; }
+    </style>
+</head>
+<body>
+    <h1>RAG System Demo</h1>
+
+    <h2>Ask a Question</h2>
+    <input type="text" id="question" placeholder="Type your question here...">
+    <button onclick="askQuestion()">Ask</button>
+    <div id="loader">⏳ Loading...</div>
+
+    <div id="results"></div>
+
+    <h2>Upload Files</h2>
+    <input type="file" id="files" multiple>
+    <button onclick="uploadFiles()">Upload</button>
+    <div id="uploadResult"></div>
+
+    <h2>Metrics</h2>
+    <button onclick="getMetrics()">Refresh Metrics</button>
+    <pre id="metrics"></pre>
+
+    <script>
+        async function askQuestion() {
+            const question = document.getElementById("question").value.trim();
+            if (!question) return;
+
+            const loader = document.getElementById("loader");
+            loader.style.display = "block";
+            const resultsDiv = document.getElementById("results");
+            resultsDiv.innerHTML = "";
+
+            try {
+                const response = await fetch("http://127.0.0.1:8000/ask", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({question})
+                });
+                const data = await response.json();
+                loader.style.display = "none";
+
+                // Show answer, context, cached
+                resultsDiv.innerHTML = `
+                    <p><strong>Answer:</strong> ${data.answer}</p>
+                    <p class="cached">${data.cached ? "✅ Cached Answer" : "🆕 Fresh Answer"}</p>
+                    <p><strong>Context:</strong> <pre>${data.context}</pre></p>
+                    <p class="metric">Latency: ${data.latency_ms?.toFixed(2) || "N/A"} ms | Tokens: ${data.tokens || 0}</p>
+                    <div class="feedback-section">
+                        <h3>Feedback</h3>
+                        <label>Score (1-5):</label>
+                        <input type="number" id="score" min="1" max="5">
+                        <label>Comment:</label>
+                        <textarea id="comment"></textarea>
+                        <button onclick="submitFeedback('${question}', '${data.answer}')">Submit Feedback</button>
+                    </div>
+                `;
+            } catch (err) {
+                loader.style.display = "none";
+                resultsDiv.innerHTML = `<p style="color:red;">Error: ${err}</p>`;
+            }
+        }
+
+        async function submitFeedback(question, answer) {
+            const score = document.getElementById("score").value;
+            const comment = document.getElementById("comment").value;
+
+            if (!score) {
+                alert("Please provide a score between 1-5");
+                return;
+            }
+
+            const response = await fetch("http://127.0.0.1:8000/feedback", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({question, answer, score: Number(score), comment})
+            });
+            const data = await response.json();
+            alert(data.status === "ok" ? "Feedback submitted!" : data.message);
+        }
+
+        async function uploadFiles() {
+            const filesInput = document.getElementById("files");
+            const uploadResult = document.getElementById("uploadResult");
+            const files = filesInput.files;
+            if (!files.length) return;
+
+            const formData = new FormData();
+            for (let f of files) formData.append("files", f);
+
+            const response = await fetch("http://127.0.0.1:8000/ingest", {
+                method: "POST",
+                body: formData
+            });
+            const data = await response.json();
+            uploadResult.innerHTML = `<p>${data.message}</p>`;
+        }
+
+        async function getMetrics() {
+            const response = await fetch("http://127.0.0.1:8000/metrics");
+            const data = await response.json();
+            document.getElementById("metrics").innerText = JSON.stringify(data, null, 2);
+        }
+    </script>
+</body>
+</html>
